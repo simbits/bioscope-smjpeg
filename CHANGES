@@ -1,0 +1,41 @@
+
+0.2.2:
+Joe Tennies - Mon Oct 10  1:25:00 PDT 2003
+ * Added useful command line options
+Joe Tennies - Mon Oct  9 23:35:00 PDT 2003
+ * Lower requirements by making ParseAudio return BLOCK_SKIPPED
+   This means you aren't refreshing the screen for an audio block
+Joe Tennies - Mon Oct  6 23:25:00 PDT 2003 
+ * Fixed issues with mulichannel ADPCM audio decoding
+ * Defaulted to transcode filenames for .jpg files
+Joe Tennies - Mon Oct  6 19:25:00 PDT 2003
+ * Fixed quality on multichannel ADPCM audio
+Sam Lantinga - Wed Feb  7 17:15:11 PST 2001
+ * Added BGR 555 color support to the JPEG library
+Sam Lantinga - Wed Aug  9 23:30:39 PDT 2000
+ * The library now almost cross-compiles as a Windows DLL
+Mathias Hasselmann - Sat, 22 Apr 2000 23:30:35 +0200
+ * Fixes for cross-compiling to Win32 using Mingw32
+Sam Lantinga - Tue Apr 11 16:17:03 PDT 2000
+ * Fixed encoding of stereo audio (nobody caught this before? :)
+
+0.2.1:
+Sam Lantinga - Thu Feb 17 12:28:26 PST 2000
+ * CHANGES entries are now Y2K compliant ;-)
+ * Added some PPC audio fixes
+
+0.2.0:
+SOL	Fully autoconf'd, updated for SDL 1.0
+SOL	Added -c option to encoder to specify number of audio channels
+SOL	Added -l option to decoder to specify looping playback
+SOL	Added SMJPEG_getposition() and SMJPEG_setposition() hacks
+
+0.1.3:
+SOL	Fixed player hang when the audio device couldn't be opened
+SOL	Fixed color problem when using 16-bit surfaces with RGB 5-5-5
+
+0.1.2:
+SOL	Fixed an audio bug
+
+0.1.1:  First public release
+
