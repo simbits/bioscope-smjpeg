@@ -721,11 +721,11 @@ int SMJPEG_inc_frame(SMJPEG *movie)
 	}
 
 	pos = movie->video.frame_offsets[movie->video.frame];
-	printf("go to: %d, 0x%.4x\n", movie->video.frame, pos);
+	//printf("go to: %d, 0x%.4x\n", movie->video.frame, pos);
 
 	SMJPEG_setposition(movie, pos);
 	status = ParseBlock(movie, 0, 0);
-	printf("ParseBlock: %d\n", status);
+	//printf("ParseBlock: %d\n", status);
 
 	return status;
 }
@@ -742,11 +742,11 @@ int SMJPEG_dec_frame(SMJPEG *movie)
 	--movie->video.frame;
 
 	pos = movie->video.frame_offsets[movie->video.frame];
-	printf("go to: %d, 0x%.4x\n", movie->video.frame, pos);
+	//printf("go to: %d, 0x%.4x\n", movie->video.frame, pos);
 
 	SMJPEG_setposition(movie, pos);
 	status = ParseBlock(movie, 0, 0);
-	printf("ParseBlock: %d\n", status);
+	//printf("ParseBlock: %d\n", status);
 
 	return status;
 }

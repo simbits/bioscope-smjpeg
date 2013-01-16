@@ -1,12 +1,23 @@
 
 /* This file plays SMJPEG format Motion JPEG movies */
 
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/select.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
 #include <limits.h>
 #include <unistd.h>
+#include <linux/input.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+
+
+static int exit_player = 0;
 
 /* Define this if you actually want to play the file */
 #define PLAY_SMJPEG
@@ -23,6 +34,12 @@ void Usage(const char *argv0)
     printf("-v displays version.\n");
 }
 
+void sigterm_callback_handler(int signum)
+{
+	printf("Caught SIGTERM, exiting\n");
+	exit_player = 1;
+}
+
 int main(int argc, char *argv[])
 {
     SMJPEG movie;
@@ -31,8 +48,12 @@ int main(int argc, char *argv[])
     int loopflag;
     int fullflag;
     int bpp;
+    int rot_enc_fd = -1 ;
+    struct input_event ev0[64];
 
-    if ( SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO) < 0 ) {
+    signal(SIGTERM, sigterm_callback_handler);
+
+    if ( SDL_Init(SDL_INIT_VIDEO) < 0 ) {
         fprintf(stderr, "Couldn't init SDL: %s\n", SDL_GetError());
         exit(1);
     }
@@ -42,6 +63,7 @@ int main(int argc, char *argv[])
     loopflag = 0;
     fullflag = 0;
     bpp = 16;
+
     for ( i=1; argv[i]; ++i ) {
         if ( (strcmp(argv[i], "-h") == 0) ||
              (strcmp(argv[i], "--help") == 0) ) {
@@ -86,8 +108,9 @@ int main(int argc, char *argv[])
             printf("Video stream: %d frames of %dx%d animation\n",
                 movie.video.frames, movie.video.width, movie.video.height);
         }
-#ifdef PLAY_SMJPEG
+
         if ( movie.video.enabled ) {
+            SDL_VideoInfo *vInfo;
             SDL_Surface *screen;
             int width, height;
 
@@ -97,13 +120,20 @@ int main(int argc, char *argv[])
                 width *= 2;
                 height *= 2;
             }
-            screen = SDL_SetVideoMode(width, height, bpp, SDL_SWSURFACE|fullflag);
+            
+            vInfo = SDL_GetVideoInfo();
+            printf("Resolution: %d x %d\n", vInfo->current_w, vInfo->current_h);
+            //screen = SDL_SetVideoMode(width, height, bpp, SDL_HWSURFACE|fullflag);
+            screen = SDL_SetVideoMode(vInfo->current_w, vInfo->current_h, 
+				      bpp, SDL_HWSURFACE|fullflag);
+
             if ( screen == NULL ) {
                 fprintf(stderr, "Couldn't set %dx%d 16-bit video mode: %s\n", 
 						width, height,
 						SDL_GetError());
                 continue;
             }
+            
             if (bpp == 24)
             {
                 screen->format->Rmask = 0xFF;
@@ -112,78 +142,56 @@ int main(int argc, char *argv[])
             }
             SMJPEG_double(&movie, doubleflag);
             SMJPEG_target(&movie, NULL, 0, 0, screen, SDL_UpdateRect);
+            SDL_ShowCursor(SDL_DISABLE);
         }
-        if ( movie.audio.enabled ) {
-            SDL_AudioSpec spec;
 
-            spec.freq = movie.audio.rate;
-            switch (movie.audio.bits) {
-                case 8:
-                    spec.format = AUDIO_U8;
-                    break;
-                case 16:
-#if SDL_BYTEORDER == SDL_LIL_ENDIAN
-                    spec.format = AUDIO_S16LSB;
-#else
-                    spec.format = AUDIO_S16MSB;
-#endif
-                    break;
-                default:
-                    /* Uh oh... */
-                    fprintf(stderr, "Unknown audio format in SMJPEG\n");
-                    spec.format = 0;
-                    break;
-            }
-            spec.channels = movie.audio.channels;
-            spec.samples = 512;
-            spec.callback = SMJPEG_feedaudio;
-            spec.userdata = &movie;
+        rot_enc_fd = open("/dev/input/by-path/platform-rotary-encoder.0-event", O_RDONLY);
 
-            if ( SDL_OpenAudio(&spec, NULL) < 0 ) {
-                movie.audio.enabled = 0;
-            } else {
-                SDL_PauseAudio(0);
-            }
-        }
-        do {
-            SMJPEG_start(&movie, 0);
-            while ( ! movie.at_end ) {
-                SDL_Event event;
+        if (rot_enc_fd < 0)
+            exit(-1);
 
+        SMJPEG_start(&movie, 0);
+        SMJPEG_inc_frame(&movie);
 
-                if ( SDL_PollEvent(&event) ) {
-                    switch(event.type) {
-                        case SDL_KEYDOWN:
-							switch( event.key.keysym.sym ) {
-								case SDLK_RIGHT:
-									SMJPEG_advance(&movie, 1, 1);
-									break;
-								case SDLK_n:
-									SMJPEG_inc_frame(&movie);
-									break;
-								case SDLK_p:
-									SMJPEG_dec_frame(&movie);
-									break;
-							}
-							break;
-                        case SDL_QUIT:
-                            loopflag = 0;
-                            SMJPEG_stop(&movie);
-                            break;
+        while (!exit_player) {
+            int rd, i;
+            SDL_Event event;
+            fd_set rfds;
+            struct timeval tv;
+            int retval;
+
+            FD_ZERO(&rfds);
+            FD_SET(rot_enc_fd, &rfds);
+
+            tv.tv_sec = 0;
+            tv.tv_usec = 500000;
+
+            retval = select(rot_enc_fd+1, &rfds, NULL, NULL, &tv);
+            
+            if (retval == -1) {
+                perror("select()");
+            } else if (retval) {
+                if (FD_ISSET(rot_enc_fd, &rfds)) {
+                    rd = read(rot_enc_fd, ev0, sizeof(struct input_event) * 64);
+                    for (i=0; i<rd/sizeof(struct input_event); i++) {
+                        printf("event[%d].type: %d, event[%d].value: %d\n", i, ev0[i].type, i, ev0[i].value);
+                        if (ev0[i].type == 2) {
+                            if (ev0[i].value == 1) {
+                                SMJPEG_inc_frame(&movie);
+                            } else if (ev0[i].value == -1 ) {
+                                SMJPEG_dec_frame(&movie);
+                            }
+                        }
                     }
                 }
-            }
-            SMJPEG_stop(&movie);
-
-            if ( loopflag ) {
-                SMJPEG_rewind(&movie);
-            }
-        } while ( loopflag );
-
-        if ( movie.audio.enabled ) {
-            SDL_CloseAudio();
+            } else {
+               printf("timeout\n");
+            } 
         }
+
+        SMJPEG_stop(&movie);
         SMJPEG_free(&movie);
-#endif /* PLAY_SMJPEG */
+        SDL_ShowCursor(SDL_ENABLE);
+        close(rot_enc_fd);
     }
 }
